@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\SupplierController;
@@ -17,13 +18,14 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\InvoiceController;
 use App\Http\Controllers\AccountingController;
-use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\PurchaseController;
+use App\Http\Controllers\CategoryController;
 
 
 /*
 |--------------------------------------------------------------------------
-| Home
+| Public Routes
 |--------------------------------------------------------------------------
 */
 
@@ -34,27 +36,25 @@ Route::get('/', function () {
 
 /*
 |--------------------------------------------------------------------------
-| Dashboard
-|--------------------------------------------------------------------------
 | Admin + Manager
 |--------------------------------------------------------------------------
 */
 
-Route::get('/dashboard', [DashboardController::class, 'index'])
-    ->middleware(['auth', 'role:admin,manager'])
-    ->name('dashboard');
+Route::middleware(['auth', 'role:admin,manager'])->group(function () {
 
+    // Dashboard
+    Route::get('/dashboard', [DashboardController::class, 'index'])
+        ->name('dashboard');
 
-/*
-|--------------------------------------------------------------------------
-| Employees
-|--------------------------------------------------------------------------
-| Admin + Manager
-|--------------------------------------------------------------------------
-*/
+    // Employees
+    Route::resource('employees', EmployeeController::class);
 
-Route::resource('employees', EmployeeController::class)
-    ->middleware(['auth', 'role:admin,manager']);
+    // Suppliers
+    Route::resource('suppliers', SupplierController::class);
+
+    // Product Categories
+    Route::resource('categories', CategoryController::class);
+});
 
 
 /*
@@ -65,20 +65,11 @@ Route::resource('employees', EmployeeController::class)
 |--------------------------------------------------------------------------
 */
 
-Route::resource('customers', CustomerController::class)
-    ->middleware(['auth', 'role:admin,manager,sales']);
+Route::middleware(['auth', 'role:admin,manager,sales'])->group(function () {
 
+    Route::resource('customers', CustomerController::class);
 
-/*
-|--------------------------------------------------------------------------
-| Suppliers
-|--------------------------------------------------------------------------
-| Admin + Manager
-|--------------------------------------------------------------------------
-*/
-
-Route::resource('suppliers', SupplierController::class)
-    ->middleware(['auth', 'role:admin,manager']);
+});
 
 
 /*
@@ -89,13 +80,16 @@ Route::resource('suppliers', SupplierController::class)
 |--------------------------------------------------------------------------
 */
 
-Route::resource('products', ProductController::class)
-    ->middleware(['auth', 'role:admin,manager,sales']);
+Route::middleware(['auth', 'role:admin,manager,sales'])->group(function () {
+
+    Route::resource('products', ProductController::class);
+
+});
 
 
 /*
 |--------------------------------------------------------------------------
-| Inventory
+| Inventory Management
 |--------------------------------------------------------------------------
 | Admin + Manager + Sales
 |--------------------------------------------------------------------------
@@ -117,12 +111,13 @@ Route::middleware(['auth', 'role:admin,manager,sales'])->group(function () {
 
     Route::get('/inventory/{product}', [InventoryController::class, 'show'])
         ->name('inventory.show');
+
 });
 
 
 /*
 |--------------------------------------------------------------------------
-| Sales
+| Sales Management
 |--------------------------------------------------------------------------
 | Admin + Manager + Sales
 |--------------------------------------------------------------------------
@@ -144,12 +139,32 @@ Route::middleware(['auth', 'role:admin,manager,sales'])->group(function () {
 
     Route::delete('/sales/{sale}', [SaleController::class, 'destroy'])
         ->name('sales.destroy');
+
 });
 
 
 /*
 |--------------------------------------------------------------------------
-| Finance
+| Invoice Management
+|--------------------------------------------------------------------------
+| Admin + Manager + Sales
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware(['auth', 'role:admin,manager,sales'])->group(function () {
+
+    Route::get('/invoices/{sale}', [InvoiceController::class, 'show'])
+        ->name('invoices.show');
+
+    Route::get('/invoices/{sale}/pdf', [InvoiceController::class, 'pdf'])
+        ->name('invoices.pdf');
+
+});
+
+
+/*
+|--------------------------------------------------------------------------
+| Finance Management
 |--------------------------------------------------------------------------
 | Admin + Manager + Accountant
 |--------------------------------------------------------------------------
@@ -157,15 +172,20 @@ Route::middleware(['auth', 'role:admin,manager,sales'])->group(function () {
 
 Route::middleware(['auth', 'role:admin,manager,accountant'])->group(function () {
 
+    // Finance Dashboard
     Route::get('/finance', [FinanceController::class, 'index'])
         ->name('finance.index');
 
+    // Expense Categories
     Route::resource('expense-categories', ExpenseCategoryController::class);
 
+    // Expenses
     Route::resource('expenses', ExpenseController::class);
 
+    // Incomes
     Route::resource('incomes', IncomeController::class);
 
+    // Payments
     Route::get('/payments', [PaymentController::class, 'index'])
         ->name('payments.index');
 
@@ -174,6 +194,44 @@ Route::middleware(['auth', 'role:admin,manager,accountant'])->group(function () 
 
     Route::post('/payments', [PaymentController::class, 'store'])
         ->name('payments.store');
+
+});
+
+
+/*
+|--------------------------------------------------------------------------
+| Purchase Management
+|--------------------------------------------------------------------------
+| Admin + Manager + Accountant
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware(['auth', 'role:admin,manager,accountant'])->group(function () {
+
+    Route::get('/purchases', [PurchaseController::class, 'index'])
+        ->name('purchases.index');
+
+    Route::get('/purchases/create', [PurchaseController::class, 'create'])
+        ->name('purchases.create');
+
+    Route::post('/purchases', [PurchaseController::class, 'store'])
+        ->name('purchases.store');
+
+    Route::get('/purchases/{purchase}', [PurchaseController::class, 'show'])
+        ->name('purchases.show');
+
+    // Mark purchase as ordered
+    Route::post('/purchases/{purchase}/order', [PurchaseController::class, 'order'])
+        ->name('purchases.order');
+
+    // Receive purchase
+    Route::post('/purchases/{purchase}/receive', [PurchaseController::class, 'receive'])
+        ->name('purchases.receive');
+
+    // Cancel purchase
+    Route::post('/purchases/{purchase}/cancel', [PurchaseController::class, 'cancel'])
+        ->name('purchases.cancel');
+
 });
 
 
@@ -185,9 +243,12 @@ Route::middleware(['auth', 'role:admin,manager,accountant'])->group(function () 
 |--------------------------------------------------------------------------
 */
 
-Route::get('/reports', [ReportController::class, 'index'])
-    ->middleware(['auth', 'role:admin,manager,accountant'])
-    ->name('reports.index');
+Route::middleware(['auth', 'role:admin,manager,accountant'])->group(function () {
+
+    Route::get('/reports', [ReportController::class, 'index'])
+        ->name('reports.index');
+
+});
 
 
 /*
@@ -198,9 +259,12 @@ Route::get('/reports', [ReportController::class, 'index'])
 |--------------------------------------------------------------------------
 */
 
-Route::get('/accounting', [AccountingController::class, 'index'])
-    ->middleware(['auth', 'role:admin,manager,accountant'])
-    ->name('accounting.index');
+Route::middleware(['auth', 'role:admin,manager,accountant'])->group(function () {
+
+    Route::get('/accounting', [AccountingController::class, 'index'])
+        ->name('accounting.index');
+
+});
 
 
 /*
@@ -211,46 +275,38 @@ Route::get('/accounting', [AccountingController::class, 'index'])
 |--------------------------------------------------------------------------
 */
 
-Route::get('/settings', [SettingController::class, 'index'])
-    ->middleware(['auth', 'role:admin'])
-    ->name('settings.index');
+Route::middleware(['auth', 'role:admin'])->group(function () {
 
-Route::put('/settings', [SettingController::class, 'update'])
-    ->middleware(['auth', 'role:admin'])
-    ->name('settings.update');
+    Route::get('/settings', [SettingController::class, 'index'])
+        ->name('settings.index');
 
+    Route::put('/settings', [SettingController::class, 'update'])
+        ->name('settings.update');
 
-/*
-|--------------------------------------------------------------------------
-| Invoices
-|--------------------------------------------------------------------------
-| Admin + Manager + Sales
-|--------------------------------------------------------------------------
-*/
+});
 
-Route::get('/invoices/{sale}', [InvoiceController::class, 'show'])
-    ->middleware(['auth', 'role:admin,manager,sales'])
-    ->name('invoices.show');
-
-Route::get('/invoices/{sale}/pdf', [InvoiceController::class, 'pdf'])
-    ->middleware(['auth', 'role:admin,manager,sales'])
-    ->name('invoices.pdf');
 
 /*
 |--------------------------------------------------------------------------
 | Notifications
 |--------------------------------------------------------------------------
-| Admin + Manager + Sales
-|--------------------------------------------------------------------------*/
-
-Route::get('/notifications', [NotificationController::class, 'index'])
-    ->middleware(['auth'])
-    ->name('notifications.index');
-
-/*
-|--------------------------------------------------------------------------
-| Authentication
+| All Authenticated Users
 |--------------------------------------------------------------------------
 */
 
-require __DIR__.'/auth.php';
+Route::middleware(['auth'])->group(function () {
+
+    Route::get('/notifications', [NotificationController::class, 'index'])
+        ->name('notifications.index');
+
+});
+
+
+/*
+|--------------------------------------------------------------------------
+| Authentication Routes
+|--------------------------------------------------------------------------
+*/
+
+require __DIR__ . '/auth.php';
+

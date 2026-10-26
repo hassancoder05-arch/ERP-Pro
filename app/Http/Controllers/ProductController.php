@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Category;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -9,38 +10,65 @@ use Illuminate\Validation\Rule;
 class ProductController extends Controller
 {
     /**
-     * Display products.
+     * Display products with search and statistics.
      */
     public function index(Request $request)
     {
-        $search = $request->input('search');
+        $search = trim($request->input('search', ''));
 
-        $products = Product::query()
-            ->when($search, function ($query) use ($search) {
+        $productQuery = Product::query()
+            ->when($search !== '', function ($query) use ($search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('product_code', 'like', "%{$search}%")
                         ->orWhere('name', 'like', "%{$search}%")
                         ->orWhere('category', 'like', "%{$search}%")
                         ->orWhere('brand', 'like', "%{$search}%");
                 });
-            })
+            });
+
+        $products = (clone $productQuery)
             ->latest()
             ->paginate(10)
             ->withQueryString();
 
-        return view('products.index', compact('products', 'search'));
+        // Product statistics across all products.
+        $totalProducts = Product::count();
+
+        $activeProducts = Product::where('status', 'active')->count();
+
+        $inactiveProducts = Product::where('status', 'inactive')->count();
+
+        $lowStockProducts = Product::where('stock', '>', 0)
+            ->whereColumn('stock', '<=', 'minimum_stock')
+            ->count();
+
+        $outOfStockProducts = Product::where('stock', '<=', 0)->count();
+
+        return view('products.index', compact(
+            'products',
+            'search',
+            'totalProducts',
+            'activeProducts',
+            'inactiveProducts',
+            'lowStockProducts',
+            'outOfStockProducts'
+        ));
     }
 
     /**
-     * Show create product form.
+     * Show the create product form.
      */
     public function create()
     {
-        return view('products.create');
+        $categories = Category::where('status', true)
+            ->orderBy('name')
+            ->get();
+
+        return view('products.create', compact('categories'));
     }
 
     /**
-     * Store product.
+     * Store a new product.
      */
     public function store(Request $request)
     {
@@ -62,6 +90,8 @@ class ProductController extends Controller
                 'nullable',
                 'string',
                 'max:100',
+                Rule::exists('categories', 'name')
+                    ->where('status', true),
             ],
 
             'brand' => [
@@ -114,7 +144,7 @@ class ProductController extends Controller
     }
 
     /**
-     * Display product.
+     * Display a specific product.
      */
     public function show(Product $product)
     {
@@ -122,15 +152,20 @@ class ProductController extends Controller
     }
 
     /**
-     * Show edit form.
+     * Show the edit product form.
      */
     public function edit(Product $product)
     {
-        return view('products.edit', compact('product'));
+        $categories = Category::orderBy('name')->get();
+
+        return view('products.edit', compact(
+            'product',
+            'categories'
+        ));
     }
 
     /**
-     * Update product.
+     * Update an existing product.
      */
     public function update(Request $request, Product $product)
     {
@@ -153,6 +188,7 @@ class ProductController extends Controller
                 'nullable',
                 'string',
                 'max:100',
+                Rule::exists('categories', 'name'),
             ],
 
             'brand' => [
@@ -205,37 +241,33 @@ class ProductController extends Controller
     }
 
     /**
-     * Delete product.
+     * Delete a product when no protected records depend on it.
      */
-    
-public function destroy(Product $product)
-{
-    // Check whether this product is already used in sales
-    if ($product->saleItems()->exists()) {
+    public function destroy(Product $product)
+    {
+        if ($product->saleItems()->exists()) {
+            return redirect()
+                ->route('products.index')
+                ->with(
+                    'error',
+                    'This product is used in sales records. Deactivate it instead.'
+                );
+        }
+
+        if ($product->inventoryTransactions()->exists()) {
+            return redirect()
+                ->route('products.index')
+                ->with(
+                    'error',
+                    'This product has inventory transactions and cannot be deleted.'
+                );
+        }
+
+        $product->delete();
+
         return redirect()
             ->route('products.index')
-            ->with(
-                'error',
-                'This product cannot be deleted because it is already used in sales records. You can deactivate it instead.'
-            );
+            ->with('success', 'Product deleted successfully.');
     }
-
-    // Check whether this product is used in inventory transactions
-    if ($product->inventoryTransactions()->exists()) {
-        return redirect()
-            ->route('products.index')
-            ->with(
-                'error',
-                'This product cannot be deleted because inventory transactions are linked to it.'
-            );
-    }
-
-    $product->delete();
-
-    return redirect()
-        ->route('products.index')
-        ->with('success', 'Product deleted successfully.');
 }
 
-
-}
